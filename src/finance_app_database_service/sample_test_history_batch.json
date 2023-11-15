@@ -1,0 +1,26 @@
+[
+  {
+    "price_type": "Open",
+    "datetime": "2023-10-16T04:00:00",
+    "ticker_name": "CBA",
+    "price": 111.04000091552734
+  },
+  {
+    "price_type": "Open",
+    "datetime": "2023-10-17T04:00:00",
+    "ticker_name": "CBA",
+    "price": 110.0999984741211
+  },
+  {
+    "price_type": "Open",
+    "datetime": "2023-10-18T04:00:00",
+    "ticker_name": "CBA",
+    "price": 111.33000183105469
+  },
+  {
+    "price_type": "Open",
+    "datetime": "2023-10-19T04:00:00",
+    "ticker_name": "CBA",
+    "price": 109.25
+  }
+]
