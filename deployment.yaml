@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: finance-app-database-service
+spec:
+  selector:
+    app: finance-app-database-service
+  ports:
+  - protocol: "TCP"
+    port: 8091
+    targetPort: 8000
+  type: LoadBalancer
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-app-database-service
+spec:
+  selector:
+    matchLabels:
+      app: finance-app-database-service
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: finance-app-database-service
+
+    spec:
+      containers:
+      - name: finance-app-database-service
+        image: docker.lucas.engineering/finance_app_database_service:0.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: TEST_VARIABLE
+          value: "Value of the test variable"
+        ports:
+        - containerPort: 8000

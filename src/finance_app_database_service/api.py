@@ -5,6 +5,8 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from finance_app_database_service.database import create_db_and_tables, populate_tickers_in_db, engine
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy import func
+
 
 create_db_and_tables()
 populate_tickers_in_db()
@@ -23,6 +25,28 @@ async def read_root():
 async def read_tickers(*, session: Session = Depends(get_session), offset: int = 0, limit: int = Query(default=100, lte=100)):
     tickers = session.exec(select(Ticker).offset(offset).limit(limit)).all()
     return tickers
+
+@app.get("/tickers/count")
+async def count_tickers(*, session: Session = Depends(get_session)):
+    count = session.exec(select([func.count(Ticker.id)])).one()
+    return count
+
+@app.post("/tickers", status_code=201)
+async def save_ticker(*, session: Session = Depends(get_session), ticker: Ticker):
+    session.add(ticker)
+    session.commit()
+    session.refresh(ticker)
+    return ticker
+
+@app.delete("/tickers/{ticker_id}")
+def delete_ticker(ticker_id: int):
+    with Session(engine) as session:
+        ticker = session.get(Ticker, ticker_id)
+        if not ticker:
+            raise HTTPException(status_code=404, detail="Ticker not found")
+        session.delete(ticker)
+        session.commit()
+        return {"ok": True}
 
 # Sample Datetime Format: 2023-10-19T00:00:00-00:00
 @app.get("/history")

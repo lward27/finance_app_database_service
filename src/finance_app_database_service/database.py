@@ -3,7 +3,7 @@ from finance_app_database_service.models import Ticker
 import csv
 import os
 
-engine = create_engine("postgresql://postgres:topsecretpassword@0.0.0.0:5432/testdb")
+engine = create_engine("postgresql://postgres:topsecretpassword@172.19.0.2:5432/testdb")
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
