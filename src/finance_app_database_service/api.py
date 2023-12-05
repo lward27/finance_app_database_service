@@ -54,6 +54,14 @@ async def get_history(*, session: Session = Depends(get_session), ticker_name: s
     history = session.exec(select(History).where(History.ticker_name == ticker_name).where(History.datetime >= datetime)).all()
     return history
 
+@app.get("/history/last_date")
+async def get_history_last_date(*, session: Session = Depends(get_session), ticker_name:str):
+    history = session.exec(select(History).where(History.ticker_name == ticker_name).order_by(History.datetime.desc())).first()
+    latest_date = None
+    if history:
+        latest_date = history.datetime
+    return latest_date
+
 @app.post("/history", status_code=201)
 async def save_history(*, session: Session = Depends(get_session), history: History):
     session.add(history)
