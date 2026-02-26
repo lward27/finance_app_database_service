@@ -13,4 +13,4 @@ LABEL "traefik.http.services.finance_app_database_service.loadbalancer.server.po
 
 EXPOSE 8000
 
-ENTRYPOINT [ "python", "/app/finance_app_database_service" ]
+ENTRYPOINT [ "python", "-m", "finance_app_database_service" ]

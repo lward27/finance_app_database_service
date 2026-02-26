@@ -1,5 +1,6 @@
-from fastapi import Depends, FastAPI, Query
+from fastapi import Depends, FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from finance_app_database_service.models import Ticker, History
 from sqlmodel import Session, SQLModel, create_engine, select
 from finance_app_database_service.database import create_db_and_tables, populate_tickers_in_db, engine
@@ -8,10 +9,21 @@ from datetime import datetime
 from sqlalchemy import func
 
 
-create_db_and_tables()
-populate_tickers_in_db()
-
 app = FastAPI()
+
+# CORS middleware for frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, restrict to specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.on_event("startup")
+def on_startup() -> None:
+    create_db_and_tables()
+    populate_tickers_in_db()
 
 def get_session():
     with Session(engine) as session:
@@ -28,8 +40,8 @@ async def read_tickers(*, session: Session = Depends(get_session), offset: int =
 
 @app.get("/tickers/count")
 async def count_tickers(*, session: Session = Depends(get_session)):
-    count = session.exec(select([func.count(Ticker.id)])).one()
-    return count
+    count_value = session.exec(select(func.count(Ticker.id))).one()
+    return count_value
 
 @app.post("/tickers", status_code=201)
 async def save_ticker(*, session: Session = Depends(get_session), ticker: Ticker):
@@ -48,10 +60,17 @@ def delete_ticker(ticker_id: int):
         session.commit()
         return {"ok": True}
 
-# Sample Datetime Format: 2023-10-19T00:00:00-00:00
 @app.get("/history")
-async def get_history(*, session: Session = Depends(get_session), ticker_name: str, datetime: datetime = "2013-10-19T00:00:00-00:00"):
-    history = session.exec(select(History).where(History.ticker_name == ticker_name).where(History.datetime >= datetime)).all()
+async def get_history(
+    *,
+    session: Session = Depends(get_session),
+    ticker_name: str,
+    from_datetime: Optional[datetime] = Query(default=None, description="Return history on/after this datetime"),
+):
+    query = select(History).where(History.ticker_name == ticker_name)
+    if from_datetime is not None:
+        query = query.where(History.datetime >= from_datetime)
+    history = session.exec(query).all()
     return history
 
 @app.get("/history/last_date")
@@ -67,7 +86,7 @@ async def save_history(*, session: Session = Depends(get_session), history: Hist
     session.add(history)
     session.commit()
     session.refresh(history)
-    return hero
+    return history
 
 @app.post("/history/batch", status_code=201)
 def save_history_batch(*, session: Session = Depends(get_session), history: List[History]):
@@ -75,5 +94,9 @@ def save_history_batch(*, session: Session = Depends(get_session), history: List
     session.bulk_insert_mappings(History, history_list)
     session.commit()
     return "success" 
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
 
 
