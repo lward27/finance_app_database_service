@@ -6,11 +6,11 @@ COPY requirements.txt .
 COPY src/setup.py .
 COPY src/finance_app_database_service ./finance_app_database_service
 
+ENV PATH="/root/.local/bin:$PATH"
 RUN pip install -r requirements.txt --user
 RUN pip install . --user
-
-LABEL "traefik.http.services.finance_app_database_service.loadbalancer.server.port"=8000
+RUN opentelemetry-bootstrap -a install
 
 EXPOSE 8000
 
-ENTRYPOINT [ "python", "-m", "finance_app_database_service" ]
+ENTRYPOINT [ "opentelemetry-instrument", "python", "-m", "finance_app_database_service" ]
