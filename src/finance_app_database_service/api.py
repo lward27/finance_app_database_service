@@ -5,7 +5,7 @@ from finance_app_database_service.models import Ticker, History
 from sqlmodel import Session, SQLModel, create_engine, select
 from finance_app_database_service.database import create_db_and_tables, populate_tickers_in_db, engine
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy import func
 
 
@@ -65,21 +65,26 @@ async def get_history(
     *,
     session: Session = Depends(get_session),
     ticker_name: str,
-    from_datetime: Optional[datetime] = Query(default=None, description="Return history on/after this datetime"),
+    from_date: Optional[date] = Query(default=None, description="Return history on/after this date"),
 ):
-    query = select(History).where(History.ticker_name == ticker_name)
-    if from_datetime is not None:
-        query = query.where(History.datetime >= from_datetime)
+    ticker = session.exec(select(Ticker).where(Ticker.ticker == ticker_name)).first()
+    if not ticker:
+        raise HTTPException(status_code=404, detail="Ticker not found")
+    query = select(History).where(History.ticker_id == ticker.id)
+    if from_date is not None:
+        query = query.where(History.ts >= from_date)
     history = session.exec(query).all()
     return history
 
 @app.get("/history/last_date")
-async def get_history_last_date(*, session: Session = Depends(get_session), ticker_name:str):
-    history = session.exec(select(History).where(History.ticker_name == ticker_name).order_by(History.datetime.desc())).first()
-    latest_date = None
-    if history:
-        latest_date = history.datetime
-    return latest_date
+async def get_history_last_date(*, session: Session = Depends(get_session), ticker_name: str):
+    ticker = session.exec(select(Ticker).where(Ticker.ticker == ticker_name)).first()
+    if not ticker:
+        return None
+    history = session.exec(
+        select(History).where(History.ticker_id == ticker.id).order_by(History.ts.desc())
+    ).first()
+    return history.ts if history else None
 
 @app.post("/history", status_code=201)
 async def save_history(*, session: Session = Depends(get_session), history: History):
@@ -93,10 +98,8 @@ def save_history_batch(*, session: Session = Depends(get_session), history: List
     history_list = [hist.dict() for hist in history]
     session.bulk_insert_mappings(History, history_list)
     session.commit()
-    return "success" 
+    return "success"
 
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
-
-
