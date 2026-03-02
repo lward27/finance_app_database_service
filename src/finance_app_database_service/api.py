@@ -1,20 +1,19 @@
 from fastapi import Depends, FastAPI, Query, HTTPException
-from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from finance_app_database_service.models import Ticker, History
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, select
+from sqlalchemy import func, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from finance_app_database_service.database import create_db_and_tables, populate_tickers_in_db, engine
 from typing import List, Optional
 from datetime import datetime, date
-from sqlalchemy import func
 
 
 app = FastAPI()
 
-# CORS middleware for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict to specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,6 +41,19 @@ async def read_tickers(*, session: Session = Depends(get_session), offset: int =
 async def count_tickers(*, session: Session = Depends(get_session)):
     count_value = session.exec(select(func.count(Ticker.id))).one()
     return count_value
+
+@app.get("/tickers/update-status")
+def get_tickers_update_status(*, session: Session = Depends(get_session)):
+    rows = session.execute(
+        text("""
+            SELECT t.id, t.ticker,
+                   COALESCE(MAX(p.ts), '1900-01-01') AS last_date
+            FROM ticker t
+            LEFT JOIN price_history p ON t.id = p.ticker_id
+            GROUP BY t.id, t.ticker
+        """)
+    ).all()
+    return [{"ticker_id": row.id, "ticker": row.ticker, "last_date": str(row.last_date)} for row in rows]
 
 @app.post("/tickers", status_code=201)
 async def save_ticker(*, session: Session = Depends(get_session), ticker: Ticker):
@@ -95,8 +107,13 @@ async def save_history(*, session: Session = Depends(get_session), history: Hist
 
 @app.post("/history/batch", status_code=201)
 def save_history_batch(*, session: Session = Depends(get_session), history: List[History]):
+    if not history:
+        return "success"
     history_list = [hist.dict() for hist in history]
-    session.bulk_insert_mappings(History, history_list)
+    stmt = pg_insert(History).values(history_list).on_conflict_do_nothing(
+        index_elements=["ticker_id", "ts"]
+    )
+    session.execute(stmt)
     session.commit()
     return "success"
 
