@@ -47,10 +47,12 @@ def get_tickers_update_status(*, session: Session = Depends(get_session)):
     rows = session.execute(
         text("""
             SELECT t.id, t.ticker,
-                   COALESCE(MAX(p.ts), '1900-01-01') AS last_date
+                   COALESCE(
+                     (SELECT MAX(p.ts) FROM price_history p WHERE p.ticker_id = t.id),
+                     '1900-01-01'::date
+                   ) AS last_date
             FROM ticker t
-            LEFT JOIN price_history p ON t.id = p.ticker_id
-            GROUP BY t.id, t.ticker
+            ORDER BY t.ticker
         """)
     ).all()
     return [{"ticker_id": row.id, "ticker": row.ticker, "last_date": str(row.last_date)} for row in rows]
