@@ -15,6 +15,10 @@ from finance_app_database_service.database import (
     engine,
 )
 from finance_app_database_service.models import Ticker, History, ScraperRun
+from finance_app_database_service.ticker_normalization import (
+    normalize_ticker,
+    TickerValidationError,
+)
 
 
 app = FastAPI()
@@ -26,6 +30,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(TickerValidationError)
+async def ticker_validation_exception_handler(request, exc: TickerValidationError):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Invalid ticker symbol"},
+    )
 
 
 @app.on_event("startup")
@@ -161,6 +174,7 @@ def get_stale_tickers(
 
 @app.post("/tickers", status_code=201)
 async def save_ticker(*, session: Session = Depends(get_session), ticker: Ticker):
+    ticker.ticker = normalize_ticker(ticker.ticker)
     session.add(ticker)
     session.commit()
     session.refresh(ticker)
@@ -185,6 +199,7 @@ async def get_history(
     ticker_name: str,
     from_date: Optional[date] = Query(default=None, description="Return history on/after this date"),
 ):
+    ticker_name = normalize_ticker(ticker_name)
     ticker = session.exec(select(Ticker).where(Ticker.ticker == ticker_name)).first()
     if not ticker:
         raise HTTPException(status_code=404, detail="Ticker not found")
@@ -197,6 +212,7 @@ async def get_history(
 
 @app.get("/history/last_date")
 async def get_history_last_date(*, session: Session = Depends(get_session), ticker_name: str):
+    ticker_name = normalize_ticker(ticker_name)
     ticker = session.exec(select(Ticker).where(Ticker.ticker == ticker_name)).first()
     if not ticker:
         return None
