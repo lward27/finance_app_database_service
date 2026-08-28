@@ -1,0 +1,24 @@
+api_version: pharness.dev/v1alpha1
+environment_profile: python-3.11
+dependency_lock:
+  kind: pip_requirements
+  path: requirements.lock
+  sha256: b5c03b6400ea2136dd2a4d61d11e36c0a64f047f95fbe86df535e13dbbb53cc6
+writable_paths:
+- src/**
+- tests/**
+- README.md
+acceptance_commands:
+- name: unit-tests
+  command: python -m unittest discover -s tests -v
+- name: compileall
+  command: python -m compileall -q src tests
+roots:
+  source:
+  - src
+  tests:
+  - tests
+  documentation:
+  - README.md
+agent_network: denied
+package_installation: preparation_only
