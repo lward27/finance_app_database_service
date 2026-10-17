@@ -87,6 +87,9 @@ tables under its singleton advisory lock. No legacy rows are updated/deleted.
 
 - One worker across all named backfills, enforced with a PostgreSQL advisory lock.
 - At least 60 seconds between request starts, persisted before each request.
+- After every response/error, reserve another interval plus five seconds. This
+  avoids client/server arrival-time races even when a request was dispatched
+  slowly. It never shortens an existing Retry-After or rate-limit cooldown.
 - Extra five-minute pause after every ten terminal ticker results.
 - Database inserts commit in 250-row batches, with a 250ms write pause.
 - HTTP 429 honors `Retry-After` and pauses globally for at least 15 minutes,

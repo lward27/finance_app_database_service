@@ -92,6 +92,29 @@ class TestBackfill(unittest.TestCase):
         self.assertIsNone(self.item.snapshot_id)
 
     @patch("finance_app_database_service.backfill.fetch_export")
+    def test_next_request_waits_after_response_even_with_slow_dispatch(self, fetch):
+        clock = [datetime.utcnow()]
+        started = clock[0]
+        def delayed_response(*args):
+            clock[0] += timedelta(seconds=30)
+            return export()
+        fetch.side_effect = delayed_response
+        with patch("finance_app_database_service.backfill.utcnow", side_effect=lambda: clock[0]):
+            process_item(self.session, self.item, CONFIG)
+        gate = self.session.get(MarketBackfillThrottle, 1)
+        self.assertEqual(gate.next_request_at, started + timedelta(seconds=95))
+
+    @patch("finance_app_database_service.backfill.fetch_export", return_value=export())
+    def test_success_does_not_shorten_an_existing_cooldown(self, fetch):
+        gate = self.session.get(MarketBackfillThrottle, 1)
+        deadline = datetime.utcnow() + timedelta(hours=1)
+        gate.next_request_at = deadline
+        self.session.add(gate)
+        self.session.commit()
+        process_item(self.session, self.item, CONFIG)
+        self.assertEqual(self.session.get(MarketBackfillThrottle, 1).next_request_at, deadline)
+
+    @patch("finance_app_database_service.backfill.fetch_export")
     def test_transient_errors_have_bounded_retries(self, fetch):
         fetch.side_effect = URLError("unavailable")
         for _ in range(5):
