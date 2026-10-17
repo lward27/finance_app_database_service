@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import SQLModel, create_engine, Session, select
 
 from finance_app_database_service.models import Ticker
+from finance_app_database_service import market_models  # Register additive tables.
 import csv
 
 log = logging.getLogger(__name__)
