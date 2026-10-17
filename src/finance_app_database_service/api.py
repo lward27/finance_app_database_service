@@ -15,6 +15,7 @@ from finance_app_database_service.database import (
     engine,
 )
 from finance_app_database_service.models import Ticker, History, ScraperRun
+from finance_app_database_service.market_api import router as market_router
 from finance_app_database_service.ticker_normalization import (
     normalize_ticker,
     TickerValidationError,
@@ -22,6 +23,7 @@ from finance_app_database_service.ticker_normalization import (
 
 
 app = FastAPI()
+app.include_router(market_router)
 
 app.add_middleware(
     CORSMiddleware,
