@@ -162,7 +162,14 @@ def process_item(session, item, config, check_lock=lambda: None):
     session.add(item)
     session.commit()
     try:
-        payload = fetch_export(config["wrapper_url"], item.ticker)
+        try:
+            payload = fetch_export(config["wrapper_url"], item.ticker)
+        finally:
+            # The wrapper's clock starts on arrival, not our request start.
+            # Reserve again after the response, with transport/clock slack.
+            # max() in postpone preserves any longer persisted cooldown.
+            check_lock()
+            postpone(session, config["interval_seconds"] + 5)
     except HTTPError as exc:
         if exc.code == 429:
             gate = session.get(MarketBackfillThrottle, 1)
