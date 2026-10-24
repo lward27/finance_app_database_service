@@ -1,8 +1,7 @@
 from datetime import datetime, date, timedelta
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, Query, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter, Depends, FastAPI, Query, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -16,25 +15,25 @@ from finance_app_database_service.database import (
 )
 from finance_app_database_service.models import Ticker, History, ScraperRun
 from finance_app_database_service.market_api import router as market_router
+from finance_app_database_service.foundation_api import router as foundation_router
+from finance_app_database_service.game_api import router as game_router
+from finance_app_database_service.identity_api import router as identity_router
+from finance_app_database_service.google_identity import GoogleClient
+from finance_app_database_service.identity_middleware import (
+    CallbackCredentialsMiddleware, install_callback_log_filter,
+)
+from finance_app_database_service.problems import RequestIDMiddleware, install_problem_handlers
+from finance_app_database_service.security import APICORSMiddleware, require_service
+from finance_app_database_service.settings import SecuritySettings
 from finance_app_database_service.ticker_normalization import (
     normalize_ticker,
     TickerValidationError,
 )
 
 
-app = FastAPI()
-app.include_router(market_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+legacy_router = APIRouter()
 
 
-@app.exception_handler(TickerValidationError)
 async def ticker_validation_exception_handler(request, exc: TickerValidationError):
     from fastapi.responses import JSONResponse
     return JSONResponse(
@@ -43,7 +42,6 @@ async def ticker_validation_exception_handler(request, exc: TickerValidationErro
     )
 
 
-@app.on_event("startup")
 def on_startup() -> None:
     wait_for_database()
     create_db_and_tables()
@@ -74,12 +72,12 @@ class ScraperRunCompleteRequest(BaseModel):
     status: str = "completed"
 
 
-@app.get("/")
+@legacy_router.get("/")
 async def read_root():
     return {"Hello": "World"}
 
 
-@app.get("/tickers", response_model=List[Ticker])
+@legacy_router.get("/tickers", response_model=List[Ticker])
 async def read_tickers(
     *,
     session: Session = Depends(get_session),
@@ -90,7 +88,7 @@ async def read_tickers(
     return tickers
 
 
-@app.get("/tickers/count")
+@legacy_router.get("/tickers/count")
 async def count_tickers(*, session: Session = Depends(get_session)):
     count_value = session.exec(select(func.count(Ticker.id))).one()
     return count_value
@@ -137,7 +135,7 @@ def _fetch_ticker_status_rows(
     ]
 
 
-@app.get("/tickers/update-status")
+@legacy_router.get("/tickers/update-status")
 def get_tickers_update_status(
     *,
     session: Session = Depends(get_session),
@@ -156,7 +154,7 @@ def get_tickers_update_status(
     )
 
 
-@app.get("/tickers/stale")
+@legacy_router.get("/tickers/stale")
 def get_stale_tickers(
     *,
     session: Session = Depends(get_session),
@@ -174,7 +172,7 @@ def get_stale_tickers(
     )
 
 
-@app.post("/tickers", status_code=201)
+@legacy_router.post("/tickers", status_code=201, dependencies=[Depends(require_service)])
 async def save_ticker(*, session: Session = Depends(get_session), ticker: Ticker):
     ticker.ticker = normalize_ticker(ticker.ticker)
     session.add(ticker)
@@ -183,7 +181,7 @@ async def save_ticker(*, session: Session = Depends(get_session), ticker: Ticker
     return ticker
 
 
-@app.delete("/tickers/{ticker_id}")
+@legacy_router.delete("/tickers/{ticker_id}", dependencies=[Depends(require_service)])
 def delete_ticker(ticker_id: int):
     with Session(engine) as session:
         ticker = session.get(Ticker, ticker_id)
@@ -194,7 +192,7 @@ def delete_ticker(ticker_id: int):
         return {"ok": True}
 
 
-@app.get("/history")
+@legacy_router.get("/history")
 async def get_history(
     *,
     session: Session = Depends(get_session),
@@ -212,7 +210,7 @@ async def get_history(
     return history
 
 
-@app.get("/history/last_date")
+@legacy_router.get("/history/last_date")
 async def get_history_last_date(*, session: Session = Depends(get_session), ticker_name: str):
     ticker_name = normalize_ticker(ticker_name)
     ticker = session.exec(select(Ticker).where(Ticker.ticker == ticker_name)).first()
@@ -224,7 +222,7 @@ async def get_history_last_date(*, session: Session = Depends(get_session), tick
     return history.ts if history else None
 
 
-@app.post("/history", status_code=201)
+@legacy_router.post("/history", status_code=201, dependencies=[Depends(require_service)])
 async def save_history(*, session: Session = Depends(get_session), history: History):
     session.add(history)
     session.commit()
@@ -232,7 +230,7 @@ async def save_history(*, session: Session = Depends(get_session), history: Hist
     return history
 
 
-@app.post("/history/batch", status_code=201)
+@legacy_router.post("/history/batch", status_code=201, dependencies=[Depends(require_service)])
 def save_history_batch(*, session: Session = Depends(get_session), history: List[History]):
     if not history:
         return "success"
@@ -245,7 +243,7 @@ def save_history_batch(*, session: Session = Depends(get_session), history: List
     return "success"
 
 
-@app.post("/scraper-runs/start", response_model=ScraperRun)
+@legacy_router.post("/scraper-runs/start", response_model=ScraperRun, dependencies=[Depends(require_service)])
 def start_scraper_run(
     *,
     session: Session = Depends(get_session),
@@ -274,7 +272,7 @@ def start_scraper_run(
     return run
 
 
-@app.post("/scraper-runs/{run_id}/progress", response_model=ScraperRun)
+@legacy_router.post("/scraper-runs/{run_id}/progress", response_model=ScraperRun, dependencies=[Depends(require_service)])
 def update_scraper_run_progress(
     run_id: str,
     *,
@@ -297,7 +295,7 @@ def update_scraper_run_progress(
     return run
 
 
-@app.post("/scraper-runs/{run_id}/complete", response_model=ScraperRun)
+@legacy_router.post("/scraper-runs/{run_id}/complete", response_model=ScraperRun, dependencies=[Depends(require_service)])
 def complete_scraper_run(
     run_id: str,
     *,
@@ -319,7 +317,7 @@ def complete_scraper_run(
     return run
 
 
-@app.get("/scraper-runs/{run_id}", response_model=ScraperRun)
+@legacy_router.get("/scraper-runs/{run_id}", response_model=ScraperRun)
 def get_scraper_run(run_id: str, *, session: Session = Depends(get_session)):
     run = session.get(ScraperRun, run_id)
     if not run:
@@ -327,7 +325,7 @@ def get_scraper_run(run_id: str, *, session: Session = Depends(get_session)):
     return run
 
 
-@app.get("/scraper-runs", response_model=List[ScraperRun])
+@legacy_router.get("/scraper-runs", response_model=List[ScraperRun])
 def list_scraper_runs(
     *,
     session: Session = Depends(get_session),
@@ -342,6 +340,36 @@ def list_scraper_runs(
     ).all()
 
 
-@app.get("/healthz")
+@legacy_router.get("/healthz")
 async def healthz():
     return {"status": "ok"}
+
+
+def create_app(settings: Optional[SecuritySettings] = None) -> FastAPI:
+    settings = settings or SecuritySettings.from_environment()
+    application = FastAPI(
+        title="Finance API",
+        version="1.0.0",
+        description=(
+            "Historical trading with explicitly gated games and Google sign-in. "
+            "Source backfill snapshots are not simulation-qualified releases."
+        ),
+    )
+    application.state.security_settings = settings
+    application.state.google_client = GoogleClient()
+    install_callback_log_filter()
+    application.include_router(legacy_router)
+    application.include_router(market_router)
+    application.include_router(foundation_router)
+    application.include_router(game_router)
+    application.include_router(identity_router)
+    application.add_event_handler("startup", on_startup)
+    application.add_exception_handler(TickerValidationError, ticker_validation_exception_handler)
+    install_problem_handlers(application)
+    application.add_middleware(APICORSMiddleware, allowed_origins=settings.allowed_origins)
+    application.add_middleware(RequestIDMiddleware)
+    application.add_middleware(CallbackCredentialsMiddleware)
+    return application
+
+
+app = create_app()

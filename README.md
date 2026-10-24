@@ -2,6 +2,39 @@
 
 A Python 3.11 FastAPI database service for the Finance Product.
 
+## Historical trading API foundations
+
+The first `/v1` slice adds secure guest sessions, disclosed immutable rules,
+stable instrument mappings, and qualified market-release read contracts.
+See [the API guide](docs/trading-api-foundations.md) for routes, browser examples,
+configuration, migration/bootstrap commands, tests, and remaining phases.
+Game commands are implemented but disabled by default.
+[Google sign-in, explicit guest recovery, and session management](docs/google-identity.md)
+are implemented but Google login is also disabled until separately configured. The
+[offline qualification preflight](docs/market-qualification.md) compares archived
+exports with supplied independent evidence, but does not establish evidence
+authenticity or make a release playable.
+The [operator publisher](docs/market-publication.md) can publish an independently
+reviewed candidate with an authenticated approval and exact database-target gate.
+It defaults to offline preview. No real release has been approved or published
+by these implementation/test steps.
+
+**Deployment prerequisite:** run the reviewed Alembic migration and configure
+allowed frontend origins and separate guest-rate-limit/service credentials.
+Legacy reads retain their bodies; legacy writes now require a service Bearer
+credential. Coordinate scraper/frontend changes before rollout. No migration,
+deployment, data qualification, or live backfill change happens automatically.
+
+## Historical trading simulator
+
+The next slice implements a pure deterministic simulator: balanced FIFO books,
+next-open long/short fills, splits/dividends, financing, session snapshots, and
+margin interruption/resolution. See [the simulator guide](docs/trading-simulator.md).
+The [persistent game API](docs/persistent-games.md) adds owned games, orders,
+portfolio/audit reads, game-scoped market data, and a durable advance worker.
+It requires the current Alembic head (game storage starts at `0003`), an explicitly enabled feature flag, and actual
+hash-checked qualified revisions. The live Yahoo backfill does not satisfy that gate.
+
 ## Ticker Symbol Normalization
 
 All ticker creation and history lookup endpoints now normalize and validate
@@ -129,6 +162,8 @@ The Dockerfile uses the hashed dependency lock, runs the unit/compile checks in
 Python 3.11, and requires the full source commit in its OCI revision label.
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
-python -m compileall -q src tests
+python3.11 -m venv .venv
+.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements-dev.lock
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m compileall -q src tests migrations
 ```
