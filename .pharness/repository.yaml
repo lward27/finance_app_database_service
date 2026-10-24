@@ -2,8 +2,8 @@ api_version: pharness.dev/v1alpha1
 environment_profile: python-3.11
 dependency_lock:
   kind: pip_requirements
-  path: requirements.lock
-  sha256: b5c03b6400ea2136dd2a4d61d11e36c0a64f047f95fbe86df535e13dbbb53cc6
+  path: requirements-dev.lock
+  sha256: 76d0e350a09d57b732b120eac194392a8b016e1156101ed52f91b15ecb2946cf
 writable_paths:
 - src/**
 - tests/**

@@ -4,6 +4,7 @@ import time
 from importlib import resources
 
 from sqlalchemy import text
+from sqlalchemy.engine import URL
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import SQLModel, create_engine, Session, select
 
@@ -24,10 +25,15 @@ def _build_database_url() -> str:
     fallback_database_url = os.getenv("DATABASE_URL")
 
     if password:
-        return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+        return URL.create(
+            "postgresql", username=user, password=password, host=host, port=int(port),
+            database=database,
+        ).render_as_string(hide_password=False)
     if fallback_database_url:
         return fallback_database_url
-    return "postgresql://postgres:topsecretpassword@postgresql.apps-prod.svc.cluster.local:5432/testdb"
+    return URL.create(
+        "postgresql", username=user, host=host, port=int(port), database=database,
+    ).render_as_string(hide_password=False)
 
 
 DATABASE_URL = _build_database_url()
@@ -56,7 +62,16 @@ def wait_for_database(max_attempts: int = 30, base_delay_seconds: float = 1.0) -
             time.sleep(delay)
 
 def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
+    # Preserve the old bootstrap without accidentally creating new game tables
+    # merely because an API router imported their models.
+    legacy_tables = {
+        "ticker", "price_history", "scraper_run", "market_backfill",
+        "market_backfill_item", "market_backfill_throttle", "market_snapshot", "market_history",
+    }
+    SQLModel.metadata.create_all(
+        engine, tables=[table for table in SQLModel.metadata.sorted_tables
+                        if table.name in legacy_tables],
+    )
 
 def populate_tickers_in_db():
     with Session(engine) as session:

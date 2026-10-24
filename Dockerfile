@@ -6,13 +6,21 @@ RUN python -m pip install --disable-pip-version-check --no-cache-dir \
     && python -m pip check
 
 FROM dependencies AS verified
+COPY requirements-dev.lock ./
+RUN python -m pip install --disable-pip-version-check --no-cache-dir \
+      --require-hashes --only-binary=:all: -r requirements-dev.lock \
+    && python -m pip check
 COPY src/finance_app_database_service ./finance_app_database_service
 COPY tests ./tests
+COPY migrations ./migrations
+COPY alembic.ini ./
 RUN python -m unittest discover -s tests -v \
-    && python -m compileall -q finance_app_database_service tests
+    && python -m compileall -q finance_app_database_service tests migrations
 
 FROM dependencies AS runtime
 COPY --from=verified /app/finance_app_database_service ./finance_app_database_service
+COPY --from=verified /app/migrations ./migrations
+COPY --from=verified /app/alembic.ini ./
 ARG SOURCE_COMMIT
 RUN case "$SOURCE_COMMIT" in *[!0-9a-f]*|'') exit 1 ;; esac \
     && test "${#SOURCE_COMMIT}" -eq 40
